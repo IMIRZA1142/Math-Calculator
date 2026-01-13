@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maths Calculator</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --danger: #ef4444;
+            --success: #22c55e;
+            --warning: #eab308;
+            --bg: #000000;
+            --panel: #111827;
+            --border: #374151;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg);
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* UI Overlays */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 100;
+            transition: opacity 0.3s;
+        }
+
+        .hidden {
+            display: none !important;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* HUD */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .stats-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+        #hp-display { color: var(--danger); }
+        #score-display { color: var(--warning); }
+        #ammo-display { color: var(--primary); }
+        #spectating-display { color: #facc15; font-size: 1rem; animate: pulse 2s infinite; }
+        
+        #mini-leaderboard {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+            z-index: 50;
+        }
+        
+        .lb-row {
+            font-size: 0.9rem;
+            margin-bottom: 2px;
+            display: flex;
+            justify-content: space-between;
+            width: 200px;
+        }
+
+        /* Generic UI Components */
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            padding: 2.5rem;
+            border-radius: 1rem;
+            text-align: center;
+            max-width: 450px;
+            width: 90%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.025em;
+            line-height: 1;
+            text-transform: uppercase;
+        }
+
+        h2 {
+            font-size: 1.2rem;
+            color: #9ca3af;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+            letter-spacing: 0.05em;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1.25rem;
+            font-weight: bold;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+        }
+        
+        .btn:disabled {
+            background: #374151;
+            color: #6b7280;
+            cursor: not-allowed;
+            transform: none;
+            filter: none;
+        }
+
+        .btn-disabled {
+            background: #374151;
+            color: #9ca3af;
+            cursor: not-allowed;
+            position: relative;
+        }
+
+        .strike-text {
+            text-decoration: line-through;
+            text-decoration-thickness: 2px;
+            opacity: 0.6;
+        }
+
+        .coming-soon-badge {
+            display: inline-block;
+            margin-left: 10px;
+            font-size: 0.8rem;
+            color: #ef4444;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            background: rgba(239, 68, 68, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-decoration: none !important;
+        }
+
+        .btn-success { background: var(--success); }
+        .btn-warning { background: var(--warning); color: black; }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            background: #1f2937;
+            border: 1px solid #4b5563;
+            border-radius: 0.375rem;
+            color: white;
+            box-sizing: border-box;
+            font-size: 1rem;
+            text-transform: uppercase;
+            font-family: monospace;
+            letter-spacing: 1px;
+        }
+
+        /* Lobby Specific */
+        .lobby-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            max-width: 900px;
+            width: 95%;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            padding: 2rem;
+            border-radius: 1rem;
+        }
+
+        .lobby-col {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+        }
+
+        .color-swatch {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.2s;
+        }
+
+        .color-swatch.selected {
+            border-color: white;
+            transform: scale(1.1);
+            box-shadow: 0 0 10px rgba(255,255,255,0.3);
+        }
+
+        .player-list-item {
+            background: rgba(255,255,255,0.05);
+            padding: 10px;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        
+        .map-select {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .map-option {
+            flex: 1;
+            padding: 10px;
+            background: #1f2937;
+            border: 1px solid #4b5563;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #9ca3af;
+            transition: all 0.2s;
+        }
+        
+        .map-option:hover {
+            filter: brightness(1.2);
+        }
+
+        .map-option.selected {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: var(--primary);
+            color: white;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.1);
+        }
+
+        .status-msg {
+            color: #eab308;
+            font-size: 0.9rem;
+            margin-top: 10px;
+            min-height: 1.2rem;
+        }
+
+        .separator {
+            width: 100%;
+            height: 1px;
+            background: #374151;
+            margin: 1rem 0;
+            position: relative;
+        }
+        
+        .separator span {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--panel);
+            padding: 0 10px;
+            color: #6b7280;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+        }
+
+        /* ROUND END LEADERBOARD */
+        #round-end-screen {
+            background: rgba(17, 24, 39, 0.98);
+            z-index: 200;
+        }
+        
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        .results-table th {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid #374151;
+            color: #9ca3af;
+            font-size: 0.9rem;
+        }
+        
+        .results-table td {
+            padding: 12px 10px;
+            border-bottom: 1px solid #374151;
+            font-size: 1.1rem;
+        }
+        
+        .results-table tr:first-child td {
+            color: #eab308; /* Winner Gold */
+            font-weight: bold;
+        }
+
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+        <div class="stats-row"><span id="hp-display">HEALTH: 100%</span></div>
+        <div class="stats-row"><span id="score-display">KILLS: 0</span></div>
+        <div class="stats-row"><span id="ammo-display">AMMO: 120</span></div>
+        <div class="stats-row"><span id="spectating-display" class="hidden">SPECTATING: OP1</span></div>
+        <div id="room-display">ROOM: <span id="room-code-hud"></span></div>
+    </div>
+    
+    <div id="mini-leaderboard" class="hidden">
+        <h3 style="margin: 0 0 10px 0; color: #9ca3af; font-size: 0.8rem; border-bottom: 1px solid #4b5563; padding-bottom: 5px;">ACTIVE AGENTS</h3>
+        <div id="lb-content">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+
+    <!-- Main Menu -->
+    <div id="main-menu" class="overlay">
+        <div class="card">
+            <h1>Maths Calculator</h1>
+            
+            <div style="margin-top: 2rem; display: flex; flex-direction: column; gap: 1rem;">
+                <button class="btn btn-disabled">
+                    <span class="strike-text">Single Player</span>
+                    <span class="coming-soon-badge">Coming Soon</span>
+                </button>
+                <button id="to-lobby-btn" class="btn">Multiplayer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lobby Screen -->
+    <div id="lobby-screen" class="overlay hidden">
+        <div class="lobby-container">
+            <!-- Left Col: Profile -->
+            <div class="lobby-col" style="border-right: 1px solid #374151; padding-right: 2rem;">
+                <div>
+                    <h2>Operative Profile</h2>
+                    <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 5px;">CALLSIGN (3 CHARS)</label>
+                    <input type="text" id="player-name-input" maxlength="3" value="OP1" placeholder="XXX">
+                </div>
+                
+                <div>
+                    <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 10px;">SIGNAL COLOR</label>
+                    <div class="color-grid" id="color-picker"></div>
+                </div>
+
+                <div style="margin-top: auto; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 0.5rem; text-align: center;">
+                    <div id="preview-dot" style="width: 20px; height: 20px; background: #3b82f6; border-radius: 50%; display: inline-block; margin-right: 10px;"></div>
+                    <span id="preview-name" style="font-weight: bold; font-family: monospace;">OP1</span>
+                </div>
+            </div>
+
+            <!-- Right Col: Game Setup -->
+            <div class="lobby-col" id="lobby-controls">
+                <h2>Mission Control</h2>
+                
+                <div id="join-section">
+                    <div style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 0.5rem; border: 1px solid #374151;">
+                        <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 5px;">JOIN EXISTING OPERATION</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="join-code-input" placeholder="CODE" maxlength="4" style="margin-bottom: 0;">
+                            <button id="join-btn" class="btn btn-success" style="margin-top: 0; width: auto;">JOIN</button>
+                        </div>
+                    </div>
+
+                    <div class="separator"><span>OR</span></div>
+
+                    <div style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 0.5rem; border: 1px solid #374151;">
+                        <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 5px;">CREATE NEW OPERATION</label>
+                        <input type="text" id="create-code-input" placeholder="SET 4-DIGIT CODE" maxlength="4">
+                        <button id="create-btn" class="btn btn-warning">OPEN LOBBY</button>
+                    </div>
+                </div>
+
+                <!-- Active Lobby View -->
+                <div id="active-lobby-view" class="hidden">
+                    <div style="background: #1f2937; padding: 10px; border-radius: 5px; margin-bottom: 10px; text-align: center;">
+                        <span style="color: #9ca3af; font-size: 0.8rem;">ROOM CODE</span>
+                        <div id="display-room-code" style="font-size: 2rem; font-weight: bold; font-family: monospace; letter-spacing: 2px;">----</div>
+                        <button id="copy-link-btn" class="btn" style="margin-top:5px; font-size:0.8rem; padding: 5px; width: 100%; background: rgba(255,255,255,0.1);">COPY INVITE LINK</button>
+                    </div>
+
+                    <h3 style="font-size: 0.9rem; color: #9ca3af; margin-bottom: 10px;">ROSTER</h3>
+                    <div id="lobby-player-list" style="max-height: 200px; overflow-y: auto; margin-bottom: 1rem;"></div>
+                    
+                    <div id="host-map-select" class="hidden" style="margin-bottom: 1rem;">
+                        <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 5px;">MISSION SECTOR</label>
+                        <div class="map-select">
+                            <div class="map-option selected" data-map="Erindale Park" onclick="selectLobbyMap('Erindale Park')">ERINDALE</div>
+                            <div class="map-option" data-map="Wasteland" onclick="selectLobbyMap('Wasteland')">WASTELAND</div>
+                        </div>
+                    </div>
+
+                    <button id="host-start-btn" class="btn btn-success hidden">START MISSION</button>
+                    <div id="client-wait-msg" class="status-msg hidden">Waiting for host to start...</div>
+                </div>
+
+                <div id="lobby-status" class="status-msg"></div>
+                <button id="back-btn" style="background: transparent; color: #6b7280; border: none; cursor: pointer; text-align: left; padding: 0; margin-top: auto;">&larr; BACK TO MENU</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Round End Leaderboard -->
+    <div id="round-end-screen" class="overlay hidden">
+        <div class="card" style="max-width: 600px;">
+            <h1>MISSION ACCOMPLISHED</h1>
+            <h2 style="color: #22c55e;">ROUND REPORT</h2>
+            
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>OPERATIVE</th>
+                        <th style="text-align:center">ROUND KILLS</th>
+                        <th style="text-align:right">TOTAL KILLS</th>
+                    </tr>
+                </thead>
+                <tbody id="results-body">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+
+            <!-- Host Controls -->
+            <div id="host-restart-controls" class="hidden" style="margin-top: 2rem; border-top: 1px solid #374151; padding-top: 1rem;">
+                <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 5px;">NEXT MISSION SECTOR</label>
+                <div class="map-select" style="margin-bottom: 15px;">
+                    <div class="map-option selected" id="end-map-erindale" onclick="selectEndMap('Erindale Park')">ERINDALE</div>
+                    <div class="map-option" id="end-map-wasteland" onclick="selectEndMap('Wasteland')">WASTELAND</div>
+                </div>
+                <button id="restart-btn" class="btn btn-warning">DEPLOY NEXT ROUND</button>
+            </div>
+            
+            <div id="client-restart-msg" class="status-msg hidden">Waiting for host to select next mission...</div>
+        </div>
+    </div>
+
+    <!-- Respawn / Spectate Overlay (Small) -->
+    <div id="spectate-overlay" class="overlay hidden" style="background: transparent; pointer-events: none;">
+        <h1 style="color: var(--danger); text-shadow: 2px 2px 0px black;">K.I.A.</h1>
+        <p style="background: black; padding: 5px 10px; border-radius: 5px;">SPECTATING MODE ACTIVE</p>
+    </div>
+</div>
+
+<script>
+    // --- PEERJS & NETWORK ---
+    const PREFIX = 'maths-calc-game-v1-';
+    
+    const Network = {
+        peer: null,
+        conn: null, // Client: connection to host
+        conns: [], // Host: list of client connections
+        isHost: false,
+        myId: null,
+        lastInputTime: 0,
+
+        init(id, onOpen) {
+            if (this.peer) this.peer.destroy();
+            this.peer = new Peer(PREFIX + id);
+            
+            this.peer.on('open', (id) => {
+                this.myId = id;
+                console.log('My ID:', id);
+                if (onOpen) onOpen();
+            });
+
+            this.peer.on('error', (err) => {
+                console.error(err);
+                if (err.type === 'unavailable-id') {
+                    ui.setStatus("Room code taken. Try another.");
+                } else if (err.type === 'peer-unavailable') {
+                    ui.setStatus("Room not found. Check code.");
+                    Game.reset();
+                } else {
+                    ui.setStatus("Network error: " + err.type);
+                }
+                document.getElementById('join-btn').disabled = false;
+                document.getElementById('join-btn').innerText = 'JOIN';
+            });
+
+            this.peer.on('connection', (conn) => {
+                if (this.isHost) {
+                    this.setupConnection(conn);
+                } else {
+                    conn.close(); 
+                }
+            });
+        },
+
+        connectToHost(hostId) {
+            this.isHost = false;
+            this.conn = this.peer.connect(PREFIX + hostId);
+            this.setupConnection(this.conn);
+        },
+
+        setupConnection(conn) {
+            conn.on('open', () => {
+                if (this.isHost) {
+                    this.conns.push(conn);
+                    // Tell new player map and current game state
+                    conn.send({ 
+                        type: 'WELCOME', 
+                        map: Game.currentMap, 
+                        gameState: Game.state // 'LOBBY' or 'PLAYING'
+                    });
+                    this.broadcastState();
+                } else {
+                    conn.send({ 
+                        type: 'JOIN', 
+                        name: Game.player.name, 
+                        color: Game.player.color 
+                    });
+                }
+            });
+
+            conn.on('data', (data) => this.handleData(data, conn));
+
+            conn.on('close', () => {
+                if (this.isHost) {
+                    this.conns = this.conns.filter(c => c !== conn);
+                    Game.removePlayer(conn.peer);
+                    this.broadcast({ type: 'PLAYER_LEFT', id: conn.peer });
+                    ui.updateLobbyList();
+                } else {
+                    ui.setStatus("Disconnected from host.");
+                    setTimeout(() => location.reload(), 2000);
+                }
+            });
+        },
+
+        handleData(data, conn) {
+            // HOST LOGIC
+            if (this.isHost) {
+                if (data.type === 'JOIN') {
+                    const isPlaying = Game.state === 'PLAYING';
+                    Game.addRemotePlayer(conn.peer, data.name, data.color, isPlaying); 
+                    this.broadcastState(); 
+                    ui.updateLobbyList();
+                }
+                else if (data.type === 'INPUT') {
+                    const p = Game.remotePlayers[conn.peer];
+                    if (p) {
+                        // Smoothly update target position for interpolation
+                        p.targetX = data.x;
+                        p.targetY = data.y;
+                        p.angle = data.angle;
+                        // First update snap (if just spawned)
+                        if (p.x === 0 && p.y === 0) { p.x = data.x; p.y = data.y; }
+                    }
+                }
+                else if (data.type === 'SHOOT') {
+                    this.broadcast({ type: 'SHOOT', id: conn.peer, x: data.x, y: data.y, vx: data.vx, vy: data.vy });
+                }
+                else if (data.type === 'HIT') {
+                    Game.handleDamage(data.targetId, data.damage, conn.peer);
+                }
+            } 
+            // CLIENT LOGIC
+            else {
+                if (data.type === 'WELCOME') {
+                    Game.currentMap = data.map;
+                    if (data.gameState === 'PLAYING') {
+                        Game.joinAsSpectator();
+                    } else {
+                        ui.showLobbyWait();
+                    }
+                }
+                else if (data.type === 'STATE_UPDATE') {
+                    const serverIds = Object.keys(data.players);
+                    serverIds.forEach(id => {
+                        if (id === this.myId) return;
+                        const pData = data.players[id];
+                        if (!Game.remotePlayers[id]) {
+                            Game.addRemotePlayer(id, pData.name, pData.color);
+                        }
+                        const p = Game.remotePlayers[id];
+                        // Interpolation Logic:
+                        // Update properties. If distance is large (teleport/spawn), snap.
+                        // Otherwise set target for lerp.
+                        const dist = Math.sqrt((p.targetX - pData.x)**2 + (p.targetY - pData.y)**2);
+                        if (dist > 200 || (p.x === 0 && p.y === 0)) {
+                            p.x = pData.x; p.y = pData.y;
+                        }
+                        p.targetX = pData.x;
+                        p.targetY = pData.y;
+                        p.angle = pData.angle; 
+                        
+                        p.hp = pData.hp;
+                        p.dead = pData.dead;
+                        p.roundKills = pData.roundKills;
+                        p.totalKills = pData.totalKills;
+                        p.color = pData.color; // Sync color just in case
+                    });
+                    
+                    Object.keys(Game.remotePlayers).forEach(id => {
+                        if (!data.players[id]) delete Game.remotePlayers[id];
+                    });
+
+                    if (data.players[this.myId]) {
+                        const s = data.players[this.myId];
+                        Game.player.hp = s.hp;
+                        Game.player.roundKills = s.roundKills;
+                        Game.player.totalKills = s.totalKills;
+                        
+                        if (s.dead && !Game.player.dead) {
+                            Game.die(s.killerId);
+                        } 
+                        else if (!s.dead && Game.player.dead) {
+                             Game.respawnLocal();
+                        }
+                    }
+                    
+                    ui.updateMiniLeaderboard();
+                    if (Game.state === 'LOBBY') ui.updateLobbyList();
+                }
+                else if (data.type === 'GAME_START') {
+                    if (data.map) Game.currentMap = data.map;
+                    Game.startRound();
+                }
+                else if (data.type === 'ROUND_END') {
+                    Game.endRound();
+                }
+                else if (data.type === 'SHOOT') {
+                    if (data.id !== this.myId) Game.spawnBullet(data.x, data.y, data.vx, data.vy, data.id);
+                }
+            }
+        },
+
+        broadcast(msg) {
+            this.conns.forEach(c => c.send(msg));
+        },
+
+        broadcastState() {
+            const all = {};
+            // Host data
+            all[this.myId] = {
+                name: Game.player.name, color: Game.player.color,
+                x: Game.player.x, y: Game.player.y, angle: Game.mouseAngle,
+                hp: Game.player.hp, dead: Game.player.dead,
+                roundKills: Game.player.roundKills, totalKills: Game.player.totalKills,
+                killerId: Game.player.killerId
+            };
+            // Clients data (using their actual positions, not targets)
+            Object.keys(Game.remotePlayers).forEach(id => {
+                const p = Game.remotePlayers[id];
+                all[id] = {
+                    name: p.name, color: p.color,
+                    x: p.x, y: p.y, angle: p.angle, // Send interpolated/current position
+                    hp: p.hp, dead: p.dead,
+                    roundKills: p.roundKills, totalKills: p.totalKills
+                };
+            });
+            this.broadcast({ type: 'STATE_UPDATE', players: all });
+        },
+        
+        sendInput(x, y, angle) { 
+            const now = Date.now();
+            if (this.conn && now - this.lastInputTime > 40) { // Throttle ~25fps
+                this.conn.send({ type: 'INPUT', x, y, angle });
+                this.lastInputTime = now;
+            } 
+        },
+        sendShoot(x, y, vx, vy) { if (this.conn) this.conn.send({ type: 'SHOOT', x, y, vx, vy }); },
+        sendHit(targetId, damage) { 
+            if (this.conn) this.conn.send({ type: 'HIT', targetId, damage });
+            else if (this.isHost) Game.handleDamage(targetId, damage, this.myId);
+        }
+    };
+
+    // --- GAME ENGINE ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const Game = {
+        state: 'LOBBY', // LOBBY, PLAYING, ENDED
+        currentMap: "Erindale Park",
+        
+        player: { 
+            x: 0, y: 0, radius: 15, color: '#3b82f6', name: 'OP1', 
+            hp: 100, roundKills: 0, totalKills: 0, dead: false, ammo: 120, killerId: null 
+        },
+        
+        spectateTargetId: null,
+        remotePlayers: {},
+        bullets: [],
+        walls: [],
+        mouseAngle: 0,
+        keys: {},
+        mouse: { x: 0, y: 0 },
+        lastShot: 0,
+        lastCactusDmg: 0,
+        lightCanvas: null, // For flashlight buffering
+        
+        init() {
+            window.addEventListener('keydown', e => this.keys[e.key.toLowerCase()] = true);
+            window.addEventListener('keyup', e => this.keys[e.key.toLowerCase()] = false);
+            window.addEventListener('mousemove', e => {
+                this.mouse.x = e.clientX;
+                this.mouse.y = e.clientY;
+            });
+            window.addEventListener('mousedown', () => this.isMouseDown = true);
+            window.addEventListener('mouseup', () => this.isMouseDown = false);
+            window.addEventListener('resize', this.resize.bind(this));
+            
+            // URL Params Check
+            const params = new URLSearchParams(window.location.search);
+            const joinCode = params.get('room');
+            if (joinCode) {
+                document.getElementById('to-lobby-btn').click();
+                document.getElementById('join-code-input').value = joinCode;
+            }
+
+            this.resize();
+            requestAnimationFrame(this.loop.bind(this));
+        },
+
+        reset() {
+            this.state = 'LOBBY';
+            this.remotePlayers = {};
+            this.bullets = [];
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('lobby-screen').classList.remove('hidden');
+            document.getElementById('round-end-screen').classList.add('hidden');
+            document.getElementById('join-btn').disabled = false;
+            document.getElementById('join-btn').innerText = 'JOIN';
+        },
+
+        startRound() {
+            this.state = 'PLAYING';
+            // UI Resets
+            document.getElementById('lobby-screen').classList.add('hidden');
+            document.getElementById('round-end-screen').classList.add('hidden');
+            document.getElementById('spectate-overlay').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('mini-leaderboard').classList.remove('hidden');
+            
+            this.buildMap(this.currentMap);
+            this.respawnLocal(); 
+            this.bullets = [];
+            
+            // Host logic: Reset remote player round stats
+            if (Network.isHost) {
+                for (let id in this.remotePlayers) {
+                    const p = this.remotePlayers[id];
+                    p.hp = 100; p.dead = false; p.roundKills = 0; p.killerId = null;
+                    const spawn = this.getSafeSpawn();
+                    p.x = spawn.x; p.y = spawn.y;
+                    p.targetX = spawn.x; p.targetY = spawn.y; // Reset interp targets
+                }
+                Network.broadcastState();
+            }
+        },
+
+        joinAsSpectator() {
+            this.state = 'PLAYING';
+            document.getElementById('lobby-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('mini-leaderboard').classList.remove('hidden');
+            
+            this.buildMap(this.currentMap);
+            this.player.dead = true;
+            this.player.hp = 0;
+            this.spectateTargetId = null; 
+            
+            ui.setStatus('Spectating match in progress...');
+        },
+
+        endRound() {
+            this.state = 'ENDED';
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('spectate-overlay').classList.add('hidden');
+            document.getElementById('round-end-screen').classList.remove('hidden');
+            document.getElementById('mini-leaderboard').classList.add('hidden');
+            
+            ui.updateRoundEndLeaderboard();
+            
+            if (Network.isHost) {
+                document.getElementById('host-restart-controls').classList.remove('hidden');
+                document.getElementById('client-restart-msg').classList.add('hidden');
+            } else {
+                document.getElementById('host-restart-controls').classList.add('hidden');
+                document.getElementById('client-restart-msg').classList.remove('hidden');
+            }
+        },
+
+        resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if (this.lightCanvas) {
+                this.lightCanvas.width = canvas.width;
+                this.lightCanvas.height = canvas.height;
+            }
+        },
+
+        buildMap(mapType) {
+            this.walls = [];
+            const B = mapType === "Wasteland" ? 2000 : 1500;
+            
+            // Borders
+            this.walls.push({ x: -B, y: -B, w: B*2, h: 40, type: 'wall' });
+            this.walls.push({ x: -B, y: B-40, w: B*2, h: 40, type: 'wall' });
+            this.walls.push({ x: -B, y: -B, w: 40, h: B*2, type: 'wall' });
+            this.walls.push({ x: B-40, y: -B, w: 40, h: B*2, type: 'wall' });
+
+            const isSafe = (x, y, w, h) => {
+                if (Math.abs(x) < 400 && Math.abs(y) < 400) return false;
+                for (let obj of this.walls) {
+                    const buf = 15;
+                    if (x < obj.x + obj.w + buf && x + w + buf > obj.x &&
+                        y < obj.y + obj.h + buf && y + h + buf > obj.y) return false;
+                }
+                return true;
+            };
+
+            if (mapType === "Wasteland") {
+                 for(let i=0; i<8; i++) {
+                     const a = (i/8) * Math.PI*2;
+                     this.walls.push({ x: Math.cos(a)*400, y: Math.sin(a)*400, w: 60, h: 60, type: 'wall' });
+                 }
+                 // Big Rocks
+                 let placed = 0, att = 0;
+                 while(placed < 60 && att < 2000) {
+                     att++;
+                     const x = (Math.random()-0.5)*3600, y = (Math.random()-0.5)*3600;
+                     const w = 80+Math.random()*80, h = 80+Math.random()*80;
+                     if (isSafe(x, y, w, h)) { this.walls.push({ x, y, w, h, type: 'wall' }); placed++; }
+                 }
+                 // Small Rocks
+                 placed=0; att=0;
+                 while(placed < 40 && att < 2000) {
+                     att++;
+                     const x = (Math.random()-0.5)*3600, y = (Math.random()-0.5)*3600;
+                     const w = 40+Math.random()*40, h = 40+Math.random()*40;
+                     if (isSafe(x, y, w, h)) { this.walls.push({ x, y, w, h, type: 'wall' }); placed++; }
+                 }
+                 // Crates
+                 placed=0; att=0;
+                 while(placed < 30 && att < 2000) {
+                    att++;
+                    const x = (Math.random()-0.5)*3200, y = (Math.random()-0.5)*3200;
+                    if (isSafe(x, y, 50, 50)) { this.walls.push({ x, y, w: 50, h: 50, type: 'cover' }); placed++; }
+                 }
+                 // Cactuses
+                 placed=0; att=0;
+                 while(placed < 35 && att < 2000) {
+                    att++;
+                    const x = (Math.random()-0.5)*3400, y = (Math.random()-0.5)*3400;
+                    if (isSafe(x, y, 40, 40)) { this.walls.push({ x, y, w: 40, h: 40, type: 'cactus' }); placed++; }
+                 }
+
+            } else {
+                 // Erindale
+                 let placed=0, att=0;
+                 while(placed < 80 && att < 2000) {
+                     att++;
+                     const x = (Math.random()-0.5)*2800, y = (Math.random()-0.5)*2800;
+                     const w = 60+Math.random()*60, h = 60+Math.random()*60;
+                     if(isSafe(x, y, w, h)) { this.walls.push({ x, y, w, h, type: 'wall' }); placed++; }
+                 }
+                 placed=0; att=0;
+                 while(placed < 40 && att < 2000) {
+                     att++;
+                     const x = (Math.random()-0.5)*2800, y = (Math.random()-0.5)*2800;
+                     if(isSafe(x, y, 60, 60)) { this.walls.push({ x, y, w: 60, h: 60, type: 'cover' }); placed++; }
+                 }
+            }
+        },
+
+        getSafeSpawn() {
+            let safe = false, x=0, y=0;
+            while(!safe) {
+                x = (Math.random()-0.5)*2000;
+                y = (Math.random()-0.5)*2000;
+                safe = true;
+                for(let w of this.walls) {
+                    if (x > w.x && x < w.x+w.w && y > w.y && y < w.y+w.h) safe = false;
+                }
+            }
+            return { x, y };
+        },
+
+        respawnLocal() {
+            const pos = this.getSafeSpawn();
+            this.player.x = pos.x;
+            this.player.y = pos.y;
+            this.player.hp = 100;
+            this.player.dead = false;
+            this.player.roundKills = 0;
+            this.player.ammo = 120;
+            this.player.killerId = null;
+            this.spectateTargetId = null;
+        },
+
+        die(killerId) {
+            this.player.dead = true;
+            this.player.hp = 0;
+            this.player.killerId = killerId;
+            document.getElementById('spectate-overlay').classList.remove('hidden');
+            
+            if (killerId && killerId !== 'CACTUS' && killerId !== Network.myId) {
+                this.spectateTargetId = killerId;
+            } else {
+                this.spectateTargetId = null;
+            }
+        },
+        
+        handleDamage(targetId, dmg, attackerId) {
+            let victim = (targetId === Network.myId) ? this.player : this.remotePlayers[targetId];
+
+            if (victim && !victim.dead) {
+                victim.hp -= dmg;
+                if (victim.hp <= 0) {
+                    victim.hp = 0;
+                    victim.dead = true;
+                    victim.killerId = attackerId;
+                    
+                    let killer = (attackerId === Network.myId) ? this.player : this.remotePlayers[attackerId];
+                    if (killer && attackerId !== 'CACTUS') {
+                        killer.roundKills = (killer.roundKills || 0) + 1;
+                        killer.totalKills = (killer.totalKills || 0) + 1;
+                    }
+                }
+                Network.broadcastState();
+            }
+        },
+
+        addRemotePlayer(id, name, color, isDead) {
+            this.remotePlayers[id] = { 
+                x: 0, y: 0, angle: 0, 
+                targetX: 0, targetY: 0, // Interp targets
+                color: color || '#fff', name: name || 'UNK', 
+                hp: isDead ? 0 : 100, 
+                roundKills: 0, totalKills: 0, 
+                dead: !!isDead 
+            };
+        },
+
+        removePlayer(id) { delete this.remotePlayers[id]; },
+
+        spawnBullet(x, y, vx, vy, ownerId) {
+            this.bullets.push({ x, y, vx, vy, ownerId, life: 100 });
+        },
+
+        updateSpectatorTarget() {
+            let target = null;
+            if (this.spectateTargetId === Network.myId) this.spectateTargetId = null;
+            
+            if (this.spectateTargetId) {
+                 target = this.remotePlayers[this.spectateTargetId];
+                 if (!target || target.dead) this.spectateTargetId = null;
+            }
+
+            if (!this.spectateTargetId) {
+                const aliveIds = Object.keys(this.remotePlayers).filter(id => !this.remotePlayers[id].dead);
+                if (aliveIds.length > 0) {
+                    this.spectateTargetId = aliveIds[Math.floor(Math.random() * aliveIds.length)];
+                } else if (!this.player.dead) {
+                    this.spectateTargetId = Network.myId;
+                }
+            }
+            
+            const disp = document.getElementById('spectating-display');
+            if (this.player.dead) {
+                disp.classList.remove('hidden');
+                let name = "NO ONE";
+                if (this.spectateTargetId && this.remotePlayers[this.spectateTargetId]) {
+                    name = this.remotePlayers[this.spectateTargetId].name;
+                }
+                disp.innerText = `SPECTATING: ${name}`;
+            } else {
+                disp.classList.add('hidden');
+            }
+        },
+
+        checkRoundEnd() {
+            if (!Network.isHost || this.state !== 'PLAYING') return;
+
+            let aliveCount = 0;
+            if (!this.player.dead) aliveCount++;
+            for(let id in this.remotePlayers) {
+                if (!this.remotePlayers[id].dead) aliveCount++;
+            }
+            
+            if (aliveCount <= 1) {
+                if (!this.endingTimer) {
+                    this.endingTimer = setTimeout(() => {
+                        Network.broadcast({ type: 'ROUND_END' });
+                        this.endRound();
+                        this.endingTimer = null;
+                    }, 2000); 
+                }
+            }
+        },
+
+        loop() {
+            if (this.state === 'PLAYING') {
+                this.update();
+                this.draw();
+                if (Network.isHost) this.checkRoundEnd();
+            }
+            
+            if (Network.isHost && Date.now() % 3 === 0) {
+                Network.broadcastState();
+            }
+            requestAnimationFrame(this.loop.bind(this));
+        },
+
+        update() {
+            if (this.player.dead) {
+                this.updateSpectatorTarget();
+                if (!Network.isHost) Network.sendInput(this.player.x, this.player.y, 0);
+            } else {
+                let dx = 0, dy = 0;
+                if (this.keys['w']) dy -= 1;
+                if (this.keys['s']) dy += 1;
+                if (this.keys['a']) dx -= 1;
+                if (this.keys['d']) dx += 1;
+                
+                const mag = Math.sqrt(dx*dx + dy*dy);
+                if (mag > 0) {
+                    this.player.x += (dx/mag) * 5;
+                    this.player.y += (dy/mag) * 5;
+                }
+
+                this.walls.forEach(w => {
+                    const cx = Math.max(w.x, Math.min(this.player.x, w.x + w.w));
+                    const cy = Math.max(w.y, Math.min(this.player.y, w.y + w.h));
+                    const dist = Math.sqrt((this.player.x - cx)**2 + (this.player.y - cy)**2);
+                    
+                    if (dist < this.player.radius) {
+                        const a = Math.atan2(this.player.y - cy, this.player.x - cx);
+                        this.player.x = cx + Math.cos(a) * this.player.radius;
+                        this.player.y = cy + Math.sin(a) * this.player.radius;
+                        
+                        if (w.type === 'cactus' && Date.now() - this.lastCactusDmg > 1000) {
+                            if (Network.isHost) this.handleDamage(Network.myId, 4, 'CACTUS');
+                            else this.player.hp -= 4; // Prediction
+                            this.lastCactusDmg = Date.now();
+                        }
+                    }
+                });
+
+                this.mouseAngle = Math.atan2(this.mouse.y - canvas.height/2, this.mouse.x - canvas.width/2);
+                if (!Network.isHost) Network.sendInput(this.player.x, this.player.y, this.mouseAngle);
+
+                if (this.isMouseDown && Date.now() - this.lastShot > 500 && this.player.ammo > 0) {
+                    const vx = Math.cos(this.mouseAngle) * 15, vy = Math.sin(this.mouseAngle) * 15;
+                    this.spawnBullet(this.player.x, this.player.y, vx, vy, Network.myId);
+                    if (Network.isHost) Network.broadcast({ type: 'SHOOT', id: Network.myId, x: this.player.x, y: this.player.y, vx, vy });
+                    else Network.sendShoot(this.player.x, this.player.y, vx, vy);
+                    this.lastShot = Date.now();
+                    this.player.ammo--;
+                }
+            }
+
+            // Interpolate remote players
+            for (let id in this.remotePlayers) {
+                const p = this.remotePlayers[id];
+                if (!p.dead) {
+                    p.x += (p.targetX - p.x) * 0.2;
+                    p.y += (p.targetY - p.y) * 0.2;
+                }
+            }
+
+            this.bullets.forEach(b => {
+                b.x += b.vx; b.y += b.vy; b.life--;
+                this.walls.forEach(w => {
+                    if (w.type === 'cover' || w.type === 'cactus') return;
+                    if (b.x > w.x && b.x < w.x+w.w && b.y > w.y && b.y < w.y+w.h) b.life = 0;
+                });
+                
+                if (b.ownerId === Network.myId) {
+                    for (let id in this.remotePlayers) {
+                        const p = this.remotePlayers[id];
+                        if (p.dead) continue;
+                        if (Math.sqrt((b.x - p.x)**2 + (b.y - p.y)**2) < 20) {
+                            b.life = 0;
+                            Network.sendHit(id, 10);
+                        }
+                    }
+                }
+            });
+            this.bullets = this.bullets.filter(b => b.life > 0);
+
+            document.getElementById('hp-display').innerText = `HEALTH: ${this.player.hp}%`;
+            document.getElementById('score-display').innerText = `KILLS: ${this.player.roundKills}`;
+            document.getElementById('ammo-display').innerText = `AMMO: ${this.player.ammo}`;
+        },
+
+        draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            let targetX = this.player.x;
+            let targetY = this.player.y;
+            
+            if (this.player.dead && this.spectateTargetId) {
+                const target = this.remotePlayers[this.spectateTargetId];
+                if (target) {
+                    targetX = target.x;
+                    targetY = target.y;
+                }
+            }
+
+            const camX = canvas.width/2 - targetX;
+            const camY = canvas.height/2 - targetY;
+            
+            ctx.save();
+            ctx.translate(camX, camY);
+
+            ctx.fillStyle = this.currentMap === 'Wasteland' ? '#78350f' : '#064e3b';
+            ctx.fillRect(-2000, -2000, 4000, 4000);
+
+            ctx.strokeStyle = "rgba(255,255,255,0.05)";
+            for(let i=-2000; i<=2000; i+=100) {
+                ctx.beginPath(); ctx.moveTo(i, -2000); ctx.lineTo(i, 2000); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-2000, i); ctx.lineTo(2000, i); ctx.stroke();
+            }
+
+            this.walls.forEach(w => {
+                if (w.type === 'cactus') {
+                    ctx.fillStyle = '#16a34a';
+                    ctx.beginPath(); ctx.arc(w.x + w.w/2, w.y + w.h/2, w.w/2, 0, Math.PI*2); ctx.fill();
+                    ctx.strokeStyle = '#bef264'; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(w.x, w.y + w.h/2); ctx.lineTo(w.x + w.w, w.y + w.h/2);
+                    ctx.moveTo(w.x + w.w/2, w.y); ctx.lineTo(w.x + w.w/2, w.y + w.h); ctx.stroke();
+                } 
+                else if (w.type === 'cover') {
+                     if (this.currentMap === 'Wasteland') {
+                        ctx.fillStyle = '#854d0e'; ctx.fillRect(w.x, w.y, w.w, w.h);
+                        ctx.strokeStyle = '#451a03'; ctx.lineWidth = 2; ctx.strokeRect(w.x, w.y, w.w, w.h);
+                        ctx.beginPath(); ctx.moveTo(w.x, w.y); ctx.lineTo(w.x+w.w, w.y+w.h); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(w.x+w.w, w.y); ctx.lineTo(w.x, w.y+w.h); ctx.stroke();
+                     } else {
+                         ctx.fillStyle = '#14532d'; ctx.beginPath(); ctx.arc(w.x + w.w/2, w.y + w.h/2, w.w/1.8, 0, Math.PI*2); ctx.fill();
+                         ctx.fillStyle = '#166534'; ctx.beginPath(); ctx.arc(w.x + w.w/2, w.y + w.h/2, w.w/3, 0, Math.PI*2); ctx.fill();
+                     }
+                } 
+                else {
+                    ctx.fillStyle = '#374151'; ctx.fillRect(w.x, w.y, w.w, w.h);
+                }
+            });
+
+            ctx.fillStyle = '#facc15';
+            this.bullets.forEach(b => {
+                ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill();
+            });
+
+            for (let id in this.remotePlayers) {
+                const p = this.remotePlayers[id];
+                if (p.dead) continue;
+                this.drawPlayer(p);
+            }
+            if (!this.player.dead) this.drawPlayer(this.player, true);
+
+            ctx.restore();
+            
+            // Draw Darkness
+            this.drawLighting(camX, camY);
+        },
+
+        drawLighting(camX, camY) {
+            if (!this.lightCanvas) {
+                this.lightCanvas = document.createElement('canvas');
+            }
+            if (this.lightCanvas.width !== canvas.width || this.lightCanvas.height !== canvas.height) {
+                this.lightCanvas.width = canvas.width;
+                this.lightCanvas.height = canvas.height;
+            }
+            
+            const lCtx = this.lightCanvas.getContext('2d');
+            
+            // Fill darkness
+            lCtx.globalCompositeOperation = 'source-over';
+            lCtx.fillStyle = "rgba(0,0,0,0.95)";
+            lCtx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Punch holes
+            lCtx.globalCompositeOperation = 'destination-out';
+            
+            const punch = (x, y, angle) => {
+                const sx = x + camX;
+                const sy = y + camY;
+                
+                // Gradient for soft edges
+                const rad = 450;
+                const grad = lCtx.createRadialGradient(sx, sy, 50, sx, sy, rad);
+                grad.addColorStop(0, "rgba(255,255,255,1)");
+                grad.addColorStop(1, "rgba(255,255,255,0)");
+                lCtx.fillStyle = grad;
+                
+                // Cone
+                lCtx.beginPath();
+                lCtx.moveTo(sx, sy);
+                lCtx.arc(sx, sy, rad, angle - 0.45, angle + 0.45);
+                lCtx.fill();
+                
+                // Aura around player
+                lCtx.fillStyle = "rgba(255,255,255,1)";
+                lCtx.beginPath();
+                lCtx.arc(sx, sy, 100, 0, Math.PI*2);
+                lCtx.fill();
+            }
+
+            if (!this.player.dead) punch(this.player.x, this.player.y, this.mouseAngle);
+
+            for (let id in this.remotePlayers) {
+                const p = this.remotePlayers[id];
+                if (!p.dead) punch(p.x, p.y, p.angle);
+            }
+
+            // Draw light overlay onto main canvas
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform to screen space
+            ctx.drawImage(this.lightCanvas, 0, 0);
+            ctx.restore();
+        },
+
+        drawPlayer(p, isLocal=false) {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            const a = isLocal ? this.mouseAngle : p.angle;
+            ctx.rotate(a);
+            ctx.fillStyle = p.color;
+            ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.fillRect(10, -5, 20, 10);
+            ctx.restore();
+
+            ctx.fillStyle = 'white';
+            ctx.font = '12px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(p.name, p.x, p.y - 25);
+            ctx.fillStyle = 'red';
+            ctx.fillRect(p.x - 15, p.y - 40, 30, 4);
+            ctx.fillStyle = '#22c55e';
+            ctx.fillRect(p.x - 15, p.y - 40, 30 * (p.hp/100), 4);
+        }
+    };
+
+    // --- UI MANAGER ---
+    const ui = {
+        setStatus(msg) { document.getElementById('lobby-status').innerText = msg; },
+        showLobbyWait() {
+            document.getElementById('join-section').classList.add('hidden');
+            document.getElementById('active-lobby-view').classList.remove('hidden');
+            document.getElementById('client-wait-msg').classList.remove('hidden');
+            document.getElementById('display-room-code').innerText = document.getElementById('join-code-input').value.toUpperCase();
+        },
+        updateLobbyList() {
+            const list = document.getElementById('lobby-player-list');
+            list.innerHTML = '';
+            const add = (name, color, isHost) => {
+                const div = document.createElement('div');
+                div.className = 'player-list-item';
+                div.innerHTML = `<div style="width:20px; height:20px; background:${color}; border-radius:50%"></div><span style="font-weight:bold; flex:1">${name}</span>${isHost?'<span style="color:#eab308; font-size:0.8rem">HOST</span>':''}`;
+                list.appendChild(div);
+            };
+            add(Game.player.name, Game.player.color, Network.isHost);
+            for (let id in Game.remotePlayers) add(Game.remotePlayers[id].name, Game.remotePlayers[id].color, false);
+        },
+        updateMiniLeaderboard() {
+            const el = document.getElementById('lb-content');
+            let data = [{ name: Game.player.name, kills: Game.player.roundKills || 0, color: Game.player.color, dead: Game.player.dead }];
+            for (let id in Game.remotePlayers) {
+                const p = Game.remotePlayers[id];
+                data.push({ name: p.name, kills: p.roundKills || 0, color: p.color, dead: p.dead });
+            }
+            data.sort((a,b) => b.kills - a.kills);
+            el.innerHTML = data.map(d => `<div class="lb-row"><span style="color:${d.color}; text-decoration:${d.dead?'line-through':''}">${d.name}</span><span>${d.kills}</span></div>`).join('');
+        },
+        updateRoundEndLeaderboard() {
+            const el = document.getElementById('results-body');
+            let data = [{ name: Game.player.name, rk: Game.player.roundKills||0, tk: Game.player.totalKills||0, color: Game.player.color }];
+            for (let id in Game.remotePlayers) {
+                const p = Game.remotePlayers[id];
+                data.push({ name: p.name, rk: p.roundKills||0, tk: p.totalKills||0, color: p.color });
+            }
+            // Sort by Round Kills for this view
+            data.sort((a,b) => b.rk - a.rk);
+            
+            el.innerHTML = data.map(d => `
+                <tr>
+                    <td style="color:${d.color}; font-weight:bold;">${d.name}</td>
+                    <td style="text-align:center;">${d.rk}</td>
+                    <td style="text-align:right;">${d.tk}</td>
+                </tr>
+            `).join('');
+        }
+    };
+
+    // --- EVENTS ---
+    const colors = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7', '#f97316', '#06b6d4'];
+    const cGrid = document.getElementById('color-picker');
+    colors.forEach(c => {
+        const d = document.createElement('div');
+        d.className = `color-swatch ${c === '#3b82f6' ? 'selected' : ''}`;
+        d.style.backgroundColor = c;
+        d.onclick = () => {
+            Game.player.color = c;
+            document.getElementById('preview-dot').style.backgroundColor = c;
+            document.querySelectorAll('.color-swatch').forEach(x => x.classList.remove('selected'));
+            d.classList.add('selected');
+        };
+        cGrid.appendChild(d);
+    });
+    
+    window.selectLobbyMap = (map) => {
+        Game.currentMap = map;
+        document.querySelectorAll('.lobby-container .map-option').forEach(el => {
+            if (el.dataset.map === map) el.classList.add('selected'); else el.classList.remove('selected');
+        });
+    };
+
+    window.selectEndMap = (map) => {
+        Game.currentMap = map;
+        document.getElementById('end-map-erindale').className = map === 'Erindale Park' ? 'map-option selected' : 'map-option';
+        document.getElementById('end-map-wasteland').className = map === 'Wasteland' ? 'map-option selected' : 'map-option';
+    };
+
+    document.getElementById('player-name-input').addEventListener('input', e => {
+        Game.player.name = e.target.value.toUpperCase();
+        document.getElementById('preview-name').innerText = Game.player.name;
+    });
+
+    document.getElementById('to-lobby-btn').onclick = () => {
+        document.getElementById('main-menu').classList.add('hidden');
+        document.getElementById('lobby-screen').classList.remove('hidden');
+    };
+    document.getElementById('back-btn').onclick = () => location.reload();
+
+    document.getElementById('create-btn').onclick = () => {
+        const code = document.getElementById('create-code-input').value.toUpperCase().trim();
+        if (code.length < 4) return alert("Code must be at least 4 chars");
+        Network.isHost = true;
+        Network.init(code, () => {
+            document.getElementById('join-section').classList.add('hidden');
+            document.getElementById('active-lobby-view').classList.remove('hidden');
+            document.getElementById('host-start-btn').classList.remove('hidden');
+            document.getElementById('host-map-select').classList.remove('hidden');
+            document.getElementById('display-room-code').innerText = code;
+            ui.updateLobbyList();
+        });
+    };
+
+    document.getElementById('join-btn').onclick = () => {
+        const code = document.getElementById('join-code-input').value.toUpperCase().trim();
+        if (code.length < 4) return alert("Code must be at least 4 chars");
+        document.getElementById('join-btn').disabled = true;
+        document.getElementById('join-btn').innerText = 'CONNECTING...';
+        Network.init('client-' + Math.random().toString(36).substr(2, 6), () => { Network.connectToHost(code); });
+    };
+
+    document.getElementById('copy-link-btn').onclick = () => {
+        const code = document.getElementById('display-room-code').innerText;
+        const url = window.location.origin + window.location.pathname + '?room=' + code;
+        navigator.clipboard.writeText(url);
+        alert("Invite link copied!");
+    };
+
+    document.getElementById('host-start-btn').onclick = () => {
+        Network.broadcast({ type: 'GAME_START', map: Game.currentMap });
+        Game.startRound();
+    };
+
+    document.getElementById('restart-btn').onclick = () => {
+        Network.broadcast({ type: 'GAME_START', map: Game.currentMap });
+        Game.startRound();
+    };
+
+    Game.init();
+</script>
+</body>
+</html>

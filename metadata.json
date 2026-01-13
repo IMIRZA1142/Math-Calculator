@@ -1,0 +1,5 @@
+{
+  "name": "Maths Calculator",
+  "description": "A high-octane 2D top-down shooter built with React and HTML5 Canvas. Features AI-generated level themes where Gemini configures enemy stats, colors, and mission briefings based on your prompts.",
+  "requestFramePermissions": []
+}
