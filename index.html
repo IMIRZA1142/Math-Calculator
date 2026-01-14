@@ -1079,6 +1079,28 @@
                 }
             }
         },
+        
+        getIntersection(rayStart, rayEnd, segmentStart, segmentEnd) {
+            const r_px = rayStart.x;
+            const r_py = rayStart.y;
+            const r_dx = rayEnd.x - rayStart.x;
+            const r_dy = rayEnd.y - rayStart.y;
+            const s_px = segmentStart.x;
+            const s_py = segmentStart.y;
+            const s_dx = segmentEnd.x - segmentStart.x;
+            const s_dy = segmentEnd.y - segmentStart.y;
+            const r_mag = Math.sqrt(r_dx * r_dx + r_dy * r_dy);
+            const s_mag = Math.sqrt(s_dx * s_dx + s_dy * s_dy);
+            if (r_mag * s_mag === 0) return null;
+            const denominator = r_dx * s_dy - r_dy * s_dx;
+            if (denominator === 0) return null;
+            const t = ((s_px - r_px) * s_dy - (s_py - r_py) * s_dx) / denominator;
+            const u = ((s_px - r_px) * r_dy - (s_py - r_py) * r_dx) / denominator;
+            if (t > 0 && t <= 1 && u >= 0 && u <= 1) {
+                return { x: r_px + t * r_dx, y: r_py + t * r_dy, param: t };
+            }
+            return null;
+        },
 
         loop(timestamp) {
             if (!this.lastTime) this.lastTime = timestamp;
@@ -1175,7 +1197,8 @@
                     for (let id in this.remotePlayers) {
                         const p = this.remotePlayers[id];
                         if (p.dead) continue;
-                        if (Math.sqrt((b.x - p.x)**2 + (b.y - p.y)**2) < 20) {
+                        // INCREASED COLLISION RADIUS FROM 20 TO 30 FOR BETTER HIT REG
+                        if (Math.sqrt((b.x - p.x)**2 + (b.y - p.y)**2) < 30) {
                             b.life = 0;
                             Network.sendHit(id, 10);
                         }
@@ -1276,30 +1299,74 @@
             lCtx.fillStyle = "rgba(0,0,0,0.95)";
             lCtx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Punch holes
+            // Punch holes with raycasting
             lCtx.globalCompositeOperation = 'destination-out';
             
             const punch = (x, y, angle) => {
                 const sx = x + camX;
                 const sy = y + camY;
+                const rad = 500;
                 
-                // Gradient for soft edges
-                const rad = 450;
-                const grad = lCtx.createRadialGradient(sx, sy, 50, sx, sy, rad);
-                grad.addColorStop(0, "rgba(255,255,255,1)");
+                // Draw soft gradient halo around player first
+                const grad = lCtx.createRadialGradient(sx, sy, 50, sx, sy, 500);
+                grad.addColorStop(0, "rgba(255,255,255,0.4)");
                 grad.addColorStop(1, "rgba(255,255,255,0)");
                 lCtx.fillStyle = grad;
-                
-                // Cone
                 lCtx.beginPath();
-                lCtx.moveTo(sx, sy);
-                lCtx.arc(sx, sy, rad, angle - 0.45, angle + 0.45);
+                lCtx.arc(sx, sy, 500, 0, Math.PI*2);
                 lCtx.fill();
                 
-                // Aura around player
+                // Now draw the hard raycast light
                 lCtx.fillStyle = "rgba(255,255,255,1)";
                 lCtx.beginPath();
-                lCtx.arc(sx, sy, 100, 0, Math.PI*2);
+                lCtx.moveTo(sx, sy);
+                
+                const fov = Math.PI / 2.5;
+                const startAngle = angle - fov/2;
+                const rays = 80; // Performance/Quality balance
+                
+                for(let i=0; i<=rays; i++) {
+                    const theta = startAngle + (i/rays) * fov;
+                    const dx = Math.cos(theta);
+                    const dy = Math.sin(theta);
+                    const rayEnd = { x: x + dx*rad, y: y + dy*rad };
+                    
+                    let closest = null;
+                    let minT = 1.0;
+                    
+                    for(const wall of this.walls) {
+                        // IGNORE CRATES ('cover') AND CACTUS FOR LIGHTING
+                        if (wall.type !== 'wall') continue;
+                        
+                        // Check collision with 4 sides of wall
+                        const segments = [
+                            {s: {x: wall.x, y: wall.y}, e: {x: wall.x+wall.w, y: wall.y}},
+                            {s: {x: wall.x+wall.w, y: wall.y}, e: {x: wall.x+wall.w, y: wall.y+wall.h}},
+                            {s: {x: wall.x+wall.w, y: wall.y+wall.h}, e: {x: wall.x, y: wall.y+wall.h}},
+                            {s: {x: wall.x, y: wall.y+wall.h}, e: {x: wall.x, y: wall.y}}
+                        ];
+                        
+                        for(const seg of segments) {
+                            const intersect = this.getIntersection({x,y}, rayEnd, seg.s, seg.e);
+                            if (intersect && intersect.param < minT) {
+                                minT = intersect.param;
+                                closest = intersect;
+                            }
+                        }
+                    }
+                    
+                    if (closest) {
+                        lCtx.lineTo(closest.x + camX, closest.y + camY);
+                    } else {
+                        lCtx.lineTo(rayEnd.x + camX, rayEnd.y + camY);
+                    }
+                }
+                lCtx.closePath();
+                lCtx.fill();
+                
+                // Small immediate circle around player to see feet
+                lCtx.beginPath();
+                lCtx.arc(sx, sy, 40, 0, Math.PI*2);
                 lCtx.fill();
             }
 
