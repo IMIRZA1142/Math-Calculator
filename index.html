@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Maths Calculator</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
@@ -26,7 +26,8 @@
             color: white;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             user-select: none;
-            touch-action: none; /* Prevent browser zooming/scrolling on mobile */
+            -webkit-user-select: none;
+            touch-action: none; /* Critical for mobile game controls */
         }
 
         #game-container {
@@ -131,7 +132,7 @@
             width: 100%;
             height: 100%;
             z-index: 60;
-            pointer-events: none;
+            pointer-events: none; /* Let touches pass through to elements */
         }
 
         .joystick-zone {
@@ -142,7 +143,7 @@
             background: rgba(255, 255, 255, 0.05);
             border: 2px solid rgba(255, 255, 255, 0.1);
             border-radius: 50%;
-            pointer-events: auto;
+            pointer-events: auto; /* Catch events */
             touch-action: none;
         }
 
@@ -177,9 +178,10 @@
             font-weight: bold;
             color: rgba(255,255,255,0.7);
             touch-action: none;
+            user-select: none;
         }
 
-        .action-btn.active {
+        .action-btn:active, .action-btn.active {
             background: rgba(255,255,255,0.2);
             transform: scale(0.95);
         }
@@ -350,6 +352,10 @@
             transition: all 0.2s;
         }
         
+        .control-option:hover {
+            filter: brightness(1.2);
+        }
+        
         .control-option.selected {
             background: var(--primary);
             color: white;
@@ -459,10 +465,10 @@
 <script type="importmap">
 {
   "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
     "react": "https://esm.sh/react@^19.2.3",
     "react/": "https://esm.sh/react@^19.2.3/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.35.0"
   }
 }
 </script>
@@ -882,19 +888,34 @@
 
             const handleJoystick = (e, zone, stickData, nubId) => {
                 e.preventDefault();
-                const touch = Array.from(e.changedTouches).find(t => t.identifier === stickData.id) || e.changedTouches[0];
-                if (!stickData.active) {
-                    stickData.active = true;
-                    stickData.id = touch.identifier;
+                // Support both Touch and Mouse for testing on PC
+                let clientX, clientY, identifier;
+                if (e.type.startsWith('touch')) {
+                    const touch = Array.from(e.changedTouches).find(t => t.identifier === stickData.id) || e.changedTouches[0];
+                    if (!stickData.active) {
+                        stickData.active = true;
+                        stickData.id = touch.identifier;
+                    }
+                    if (touch.identifier !== stickData.id) return;
+                    clientX = touch.clientX;
+                    clientY = touch.clientY;
+                } else {
+                    // Mouse
+                    if (!stickData.active && e.type === 'mousedown') {
+                        stickData.active = true;
+                        stickData.id = 'mouse';
+                    }
+                    if (stickData.id !== 'mouse') return;
+                    clientX = e.clientX;
+                    clientY = e.clientY;
                 }
-                if (touch.identifier !== stickData.id) return;
 
                 const rect = zone.getBoundingClientRect();
                 const centerX = rect.left + rect.width / 2;
                 const centerY = rect.top + rect.height / 2;
                 
-                let dx = touch.clientX - centerX;
-                let dy = touch.clientY - centerY;
+                let dx = clientX - centerX;
+                let dy = clientY - centerY;
                 const dist = Math.sqrt(dx*dx + dy*dy);
                 const maxDist = rect.width / 2;
 
@@ -919,19 +940,36 @@
                 document.getElementById(nubId).style.transform = `translate(-50%, -50%)`;
             };
 
+            // Left Stick
             lZone.addEventListener('touchstart', e => handleJoystick(e, lZone, this.leftStick, 'stick-left-nub'));
             lZone.addEventListener('touchmove', e => handleJoystick(e, lZone, this.leftStick, 'stick-left-nub'));
             lZone.addEventListener('touchend', e => resetJoystick(this.leftStick, 'stick-left-nub'));
+            // Mouse fallbacks
+            lZone.addEventListener('mousedown', e => handleJoystick(e, lZone, this.leftStick, 'stick-left-nub'));
+            window.addEventListener('mousemove', e => { if(this.leftStick.active && this.leftStick.id === 'mouse') handleJoystick(e, lZone, this.leftStick, 'stick-left-nub'); });
+            window.addEventListener('mouseup', e => { if(this.leftStick.active && this.leftStick.id === 'mouse') resetJoystick(this.leftStick, 'stick-left-nub'); });
 
+            // Right Stick
             rZone.addEventListener('touchstart', e => handleJoystick(e, rZone, this.rightStick, 'stick-right-nub'));
             rZone.addEventListener('touchmove', e => handleJoystick(e, rZone, this.rightStick, 'stick-right-nub'));
             rZone.addEventListener('touchend', e => resetJoystick(this.rightStick, 'stick-right-nub'));
+            // Mouse fallbacks
+            rZone.addEventListener('mousedown', e => handleJoystick(e, rZone, this.rightStick, 'stick-right-nub'));
+            window.addEventListener('mousemove', e => { if(this.rightStick.active && this.rightStick.id === 'mouse') handleJoystick(e, rZone, this.rightStick, 'stick-right-nub'); });
+            window.addEventListener('mouseup', e => { if(this.rightStick.active && this.rightStick.id === 'mouse') resetJoystick(this.rightStick, 'stick-right-nub'); });
 
-            bSprint.addEventListener('touchstart', e => { e.preventDefault(); this.sprint = true; bSprint.classList.add('active'); });
-            bSprint.addEventListener('touchend', e => { e.preventDefault(); this.sprint = false; bSprint.classList.remove('active'); });
-
-            bShoot.addEventListener('touchstart', e => { e.preventDefault(); this.shoot = true; bShoot.classList.add('active'); });
-            bShoot.addEventListener('touchend', e => { e.preventDefault(); this.shoot = false; bShoot.classList.remove('active'); });
+            // Buttons
+            const bindBtn = (btn, prop) => {
+                const press = (e) => { e.preventDefault(); this[prop] = true; btn.classList.add('active'); };
+                const release = (e) => { e.preventDefault(); this[prop] = false; btn.classList.remove('active'); };
+                btn.addEventListener('touchstart', press);
+                btn.addEventListener('touchend', release);
+                btn.addEventListener('mousedown', press);
+                btn.addEventListener('mouseup', release);
+                btn.addEventListener('mouseleave', release);
+            };
+            bindBtn(bSprint, 'sprint');
+            bindBtn(bShoot, 'shoot');
         }
     };
 
